@@ -232,3 +232,77 @@ plt.ylabel("RMSE")
 plt.grid(True, alpha=0.3)
 plt.savefig("RMSE_vs_K")
 plt.show()
+
+# Interpretation of hidden factors
+k_best = best["k"]
+
+# Movies
+movies_mata = train_df.groupby("item_id", as_index=False)["rating"].mean()
+movies_mata = movies_mata.rename(columns={"rating": "avg_rating"})
+
+titles = train_df[["item_id", "title"]].dropna().drop_duplicates("item_id")
+movies_mata = movies_mata.merge(titles, on="item_id", how="left")
+movies_mata["year"] = movies_mata["title"].apply(extract_year)
+
+movies_embeddings = U[:, :k_best] * s[:k_best]
+
+def show_movie_extremes_for_component(comp, top_n=7):
+    comp_values = movies_embeddings[:, comp]
+    order = np.argsort(comp_values)
+
+    low_index = order[:top_n]
+    high_index = order[-top_n:]
+
+    movie_ids = ratings_matrix.index.to_numpy()
+
+    lows = movies_mata[movies_mata["item_id"].isin(movie_ids[low_index])]
+    lows = lows.assign(score=comp_values[low_index]).sort_values("score")
+
+    highs = movies_mata[movies_mata["item_id"].isin(movie_ids[high_index])]
+    highs = highs.assign(score=comp_values[high_index]).sort_values("score", ascending=False)
+
+    print(f"\nComponent {comp+1}: Movies at negative end:")
+    print(lows[["item_id", "title", "year", "avg_rating", "score"]].to_string(index=False))
+
+    print(f"\nComponent {comp+1}: Movies at positive end:")
+    print(highs[["item_id", "title", "year", "avg_rating", "score"]].to_string(index=False))
+
+for comp in range(min(3, movies_embeddings.shape[1])):
+    show_movie_extremes_for_component(comp)
+
+# Users
+user_embeddings = Vt[:k_best, :].T   
+
+def show_user_extremes_for_component(comp, top_n=7):
+    comp_values = user_embeddings[:, comp]
+    order = np.argsort(comp_values)
+
+    low_idx = order[:top_n]
+    high_idx = order[-top_n:]
+
+    users_index = ratings_matrix.columns.to_numpy()
+
+    lows = pd.DataFrame({"user_id": users_index[low_idx], "score": comp_values[low_idx]
+    }).sort_values("score")
+
+    highs = pd.DataFrame({"user_id": users_index[high_idx], "score": comp_values[high_idx]
+    }).sort_values("score", ascending=False)
+
+    print(f"\nComponent {comp+1}: Users at negative end:")
+    print(lows.to_string(index=False))
+
+    print(f"\nComponent {comp+1}: Users at positive end:")
+    print(highs.to_string(index=False))
+
+for comp in range(min(3, user_embeddings.shape[1])):
+    show_user_extremes_for_component(comp)
+
+"""
+The movies in one component are similar in genre and theme. For example for 
+component 1 at the negative end, these movies are united by their status as
+iconic, high-energy blockbusters from the 1980s and 1990s, blending action,
+adventure, and often sci-fi or fantasy elements, with strong audience appeal
+and cultural significance. 
+
+Similary, the users in one component like movies with similar genres and themes.
+"""
