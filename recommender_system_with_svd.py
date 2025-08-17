@@ -134,6 +134,26 @@ def svd_with_deflation(A, num_singular_values=10, max_iter=1000, tol=1e-6, rando
 
     return U, s, Vt
 
+
+def pca_transform(X, n_components=2):
+    X_centered = X - np.mean(X, axis=0)
+    
+    # Covariance matrix
+    cov = np.cov(X_centered, rowvar=False)
+    
+    eigvals, eigvecs = np.linalg.eigh(cov)
+    idx = np.argsort(eigvals)[::-1]
+    eigvals, eigvecs = eigvals[idx], eigvecs[:, idx]
+    
+    # Fix sign convention (to have similar result with sklearn PCA)
+    for i in range(eigvecs.shape[1]):
+        if np.abs(eigvecs[:, i]).max() > 0:
+            if eigvecs[np.argmax(np.abs(eigvecs[:, i])), i] < 0:
+                eigvecs[:, i] *= -1
+    
+    W = eigvecs[:, :n_components]
+    return X_centered @ W
+
 # ===========================
 
 train_df = pd.read_csv("data.csv")
@@ -238,12 +258,12 @@ plt.show()
 k_best = best["k"]
 
 # Movies
-movies_mata = train_df.groupby("item_id", as_index=False)["rating"].mean()
-movies_mata = movies_mata.rename(columns={"rating": "avg_rating"})
+movies_meta = train_df.groupby("item_id", as_index=False)["rating"].mean()
+movies_meta = movies_meta.rename(columns={"rating": "avg_rating"})
 
 titles = train_df[["item_id", "title"]].dropna().drop_duplicates("item_id")
-movies_mata = movies_mata.merge(titles, on="item_id", how="left")
-movies_mata["year"] = movies_mata["title"].apply(extract_year)
+movies_meta = movies_meta.merge(titles, on="item_id", how="left")
+movies_meta["year"] = movies_meta["title"].apply(extract_year)
 
 movies_embeddings = U[:, :k_best] * s[:k_best]
 
@@ -256,10 +276,10 @@ def show_movie_extremes_for_component(comp, top_n=7):
 
     movie_ids = ratings_matrix.index.to_numpy()
 
-    lows = movies_mata[movies_mata["item_id"].isin(movie_ids[low_index])]
+    lows = movies_meta[movies_meta["item_id"].isin(movie_ids[low_index])]
     lows = lows.assign(score=comp_values[low_index]).sort_values("score")
 
-    highs = movies_mata[movies_mata["item_id"].isin(movie_ids[high_index])]
+    highs = movies_meta[movies_meta["item_id"].isin(movie_ids[high_index])]
     highs = highs.assign(score=comp_values[high_index]).sort_values("score", ascending=False)
 
     print(f"\nComponent {comp+1}: Movies at negative end:")
@@ -362,3 +382,43 @@ def plot_user_with_nearest_movies(user_id, top_n=5):
 plot_user_with_nearest_movies(user_id=1)
 
 
+# Clustering
+num_clusters = 5
+kmeans = KMeans(n_clusters=num_clusters, n_init=10, random_state=0)
+movie_labels = kmeans.fit_predict(movies_embeddings)
+
+labels_df = pd.DataFrame({
+    "item_id": ratings_matrix.index.to_numpy(),
+    "cluster": movie_labels
+})
+movies_meta = movies_meta.merge(labels_df, on="item_id", how="left")
+
+coords_2d = pca_transform(movies_embeddings, n_components=2)
+
+plt.figure(figsize=(8, 6))
+plt.scatter(coords_2d[:, 0], coords_2d[:, 1],
+            c=movie_labels, alpha=0.7, s=10)
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+plt.title("Movie clusters in latent space")
+plt.savefig("Movie_clusters")
+plt.show()
+
+print("\nSample movies per cluster:")
+for c in range(num_clusters):
+    subset = movies_meta[movies_meta["cluster"] == c]
+    if subset.empty:
+        print(f"\nCluster {c+1}: (no items)")
+        continue
+    sample = subset.nlargest(min(8, len(subset)), "avg_rating")
+    print(f"\nCluster {c+1} (n={len(subset)}):")
+    print(sample[["title", "avg_rating", "year"]].to_string(index=False))
+
+"""
+Movies in one cluster are similar in theme and audience. 
+For example in the frist cluster they emphasize human 
+stories, often with emotional or cultural resonance, and 
+tend to have limited mainstream commercial success, while
+the films in the fifth cluster are iconic 1970s-1980s blockbusters,
+primarily in the action-adventure and sci-fi/fantasy genres.
+"""
