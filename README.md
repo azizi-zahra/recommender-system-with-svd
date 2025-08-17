@@ -8,6 +8,10 @@ It predicts missing ratings in a user–item matrix (e.g., movie ratings), uncov
 
 The system is built from scratch with **custom SVD via power iteration and deflation**, in addition to standard evaluation and visualization techniques.
 
+Datasets:
+[Training set](https://s33.picofile.com/file/8485574792/data.csv.html)
+[Test set](https://s33.picofile.com/file/8485574800/test.csv.html)
+
 ## Table of Contents
 
 -   [Introduction](#introduction)
