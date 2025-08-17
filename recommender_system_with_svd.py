@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error
+from sklearn.metrics.pairwise import cosine_distances
 from sklearn.cluster import KMeans
 
 # ======== Utilities ========
@@ -271,7 +272,7 @@ for comp in range(min(3, movies_embeddings.shape[1])):
     show_movie_extremes_for_component(comp)
 
 # Users
-user_embeddings = Vt[:k_best, :].T   
+user_embeddings = Vt[:k_best, :].T * s[:k_best]  
 
 def show_user_extremes_for_component(comp, top_n=7):
     comp_values = user_embeddings[:, comp]
@@ -306,3 +307,58 @@ and cultural significance.
 
 Similary, the users in one component like movies with similar genres and themes.
 """
+
+# Pairwise comparision
+movies_2d = movies_embeddings[:, :2]
+users_2d = user_embeddings[:, :2]
+
+plt.figure(figsize=(8, 6))
+plt.scatter(movies_2d[:, 0], movies_2d[:, 1], 
+            alpha=0.4, label="Movies", s=10, c="blue")
+plt.scatter(users_2d[:, 0], users_2d[:, 1], 
+            alpha=0.4, label="Users", s=10, c="red")
+plt.axhline(0, color="gray", linewidth=0.5)
+plt.axvline(0, color="gray", linewidth=0.5)
+plt.xlabel("Latent Factor 1")
+plt.ylabel("Latent Factor 2")
+plt.title("Users and Movies in Latent Space")
+plt.legend()
+plt.savefig("Users_and_Movies_in_Latent_Space")
+plt.show()
+
+# Example for a user
+def plot_user_with_nearest_movies(user_id, top_n=5):
+    user_index = list(ratings_matrix.columns).index(user_id)
+    user_vec = user_embeddings[user_index, :2]
+    
+    dists = cosine_distances(
+        user_embeddings[user_index, :].reshape(1, -1), 
+        movies_embeddings[:, :k_best]
+    ).flatten()
+    
+    nearest_idx = np.argsort(dists)[:top_n]
+    
+    plt.figure(figsize=(8, 6))
+    plt.scatter(movies_2d[:, 0], movies_2d[:, 1], 
+                alpha=0.3, label="Movies", s=10, c="blue")
+    plt.scatter(users_2d[:, 0], users_2d[:, 1], 
+                alpha=0.1, label="Users", s=10, c="red")
+    plt.scatter(user_vec[0], user_vec[1], c="black", s=80, marker="x", label=f"User {user_id}")
+    plt.scatter(movies_2d[nearest_idx, 0], movies_2d[nearest_idx, 1],
+                c="green", s=50, label="Nearest Movies") 
+    plt.axhline(0, color="gray", linewidth=0.5)
+    plt.axvline(0, color="gray", linewidth=0.5)
+    plt.xlabel("Latent Factor 1")
+    plt.ylabel("Latent Factor 2")
+    plt.title(f"User {user_id} and their nearest movies in latent space")
+    plt.legend()
+    plt.savefig("Users_and_their_nearest_movies")
+    plt.show()
+    
+    movie_ids = ratings_matrix.index.to_numpy()
+    print(f"\nNearest {top_n} movies to user {user_id}:")
+    print(movie_ids[nearest_idx])
+
+plot_user_with_nearest_movies(user_id=1)
+
+
